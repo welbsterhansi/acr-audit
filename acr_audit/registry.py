@@ -59,24 +59,32 @@ def list_recent_manifests(
     repo: str,
     top: int,
 ) -> list[ManifestInfo]:
-    """Retorna os ``top`` manifests mais recentes do repo (ordem decrescente de push).
+    """Retorna os ``top`` manifests **com tag** mais recentes do repo.
 
-    Usa o endpoint específico do ACR ``/acr/v1/{repo}/_manifests?orderby=timedesc``.
+    Manifests sem tag são ignorados (tipicamente artefatos de scan do Defender,
+    SBOM attestations, ou órfãos). Como ninguém puxa esses via ``FROM``, não
+    fazem parte do universo auditável. Paginação continua até acumularmos
+    ``top`` manifests tagged ou acabarem os resultados.
+
+    Usa ``/acr/v1/{repo}/_manifests?orderby=timedesc&n=100``.
     """
     if top <= 0:
         return []
-    page_size = min(top, 100)
-    path = f"/acr/v1/{repo}/_manifests?orderby=timedesc&n={page_size}"
+    path = f"/acr/v1/{repo}/_manifests?orderby=timedesc&n=100"
     scope = _repo_scope(repo)
     out: list[ManifestInfo] = []
-    for raw in client.paginate(path, scope=scope, items_key="manifests", limit=top):
+    for raw in client.paginate(path, scope=scope, items_key="manifests"):
         digest = raw.get("digest")
         if not isinstance(digest, str):
             continue
         tags_raw = raw.get("tags") or []
         tags = tuple(t for t in tags_raw if isinstance(t, str))
+        if not tags:
+            continue
         pushed = raw.get("lastUpdateTime") or raw.get("createdTime")
         out.append(ManifestInfo(digest=digest, tags=tags, pushed_at=pushed))
+        if len(out) >= top:
+            break
     return out
 
 

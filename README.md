@@ -41,7 +41,7 @@ python3 audit.py \
 | `--label KEY[=VALUE]` (obrigatório, repetível) | Label exigida. `KEY` só exige existência; `KEY=VALUE` exige valor exato |
 | `--exclude-repo GLOB` (repetível) | Repos a ignorar (ex.: `base-images/*`) |
 | `--include-repo GLOB` (repetível) | Restringe o escopo (default: tudo) |
-| `--top N` | N imagens mais recentes por repo (padrão: 10) |
+| `--top N` | N imagens **com tag** mais recentes por repo (padrão: 10). Manifests sem tag — scans do Defender, SBOM, órfãos — são ignorados |
 | `--platform os/arch` | Plataforma em image index multi-arch (padrão: `linux/amd64`) |
 | `--workers N` | Threads paralelas (padrão: 16) |
 | `--output FILE` | Caminho do JSON (padrão: `audit-report.json`) |

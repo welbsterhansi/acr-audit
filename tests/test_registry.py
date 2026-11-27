@@ -88,7 +88,7 @@ class TestListRecentManifests:
 
     def test_maps_fields(self) -> None:
         pages = {
-            "/acr/v1/myrepo/_manifests?orderby=timedesc&n=5": [
+            "/acr/v1/myrepo/_manifests?orderby=timedesc&n=100": [
                 {
                     "digest": "sha256:aaa",
                     "tags": ["v1", "latest"],
@@ -97,7 +97,7 @@ class TestListRecentManifests:
                 },
                 {
                     "digest": "sha256:bbb",
-                    "tags": [],
+                    "tags": ["v2"],
                     "createdTime": "2026-11-18T10:00:00Z",
                 },
             ],
@@ -112,16 +112,17 @@ class TestListRecentManifests:
             ),
             ManifestInfo(
                 digest="sha256:bbb",
-                tags=(),
+                tags=("v2",),
                 pushed_at="2026-11-18T10:00:00Z",
             ),
         ]
 
     def test_prefers_last_update_over_created(self) -> None:
         pages = {
-            "/acr/v1/r/_manifests?orderby=timedesc&n=1": [
+            "/acr/v1/r/_manifests?orderby=timedesc&n=100": [
                 {
                     "digest": "sha256:x",
+                    "tags": ["v1"],
                     "lastUpdateTime": "2026-11-20",
                     "createdTime": "2020-01-01",
                 },
@@ -131,28 +132,53 @@ class TestListRecentManifests:
         [m] = list_recent_manifests(client, "r", top=1)
         assert m.pushed_at == "2026-11-20"
 
-    def test_page_size_capped_at_100(self) -> None:
+    def test_fetches_pages_of_100(self) -> None:
         pages = {"/acr/v1/r/_manifests?orderby=timedesc&n=100": []}
         client = FakeClient(pages=pages)
         list_recent_manifests(client, "r", top=5000)
         assert client.paginate_calls[0][0] == "/acr/v1/r/_manifests?orderby=timedesc&n=100"
 
     def test_requires_repo_scope(self) -> None:
-        pages = {"/acr/v1/r/_manifests?orderby=timedesc&n=5": []}
+        pages = {"/acr/v1/r/_manifests?orderby=timedesc&n=100": []}
         client = FakeClient(pages=pages)
         list_recent_manifests(client, "r", top=5)
         assert client.paginate_calls[0][1] == "repository:r:metadata_read,pull"
 
     def test_skips_entries_without_digest(self) -> None:
         pages = {
-            "/acr/v1/r/_manifests?orderby=timedesc&n=2": [
+            "/acr/v1/r/_manifests?orderby=timedesc&n=100": [
                 {"tags": ["x"]},
-                {"digest": "sha256:ok"},
+                {"digest": "sha256:ok", "tags": ["y"]},
             ],
         }
         client = FakeClient(pages=pages)
         result = list_recent_manifests(client, "r", top=2)
         assert [m.digest for m in result] == ["sha256:ok"]
+
+    def test_skips_untagged_manifests(self) -> None:
+        """Manifests sem tag (scans do Defender, SBOM, órfãos) são ignorados."""
+        pages = {
+            "/acr/v1/r/_manifests?orderby=timedesc&n=100": [
+                {"digest": "sha256:defender-scan", "tags": []},
+                {"digest": "sha256:orphan"},  # tags ausente
+                {"digest": "sha256:real-image", "tags": ["v1"]},
+            ],
+        }
+        client = FakeClient(pages=pages)
+        result = list_recent_manifests(client, "r", top=5)
+        assert [m.digest for m in result] == ["sha256:real-image"]
+
+    def test_top_counts_only_tagged(self) -> None:
+        """Se os primeiros N mais recentes forem artefatos sem tag, continua paginando."""
+        pages = {
+            "/acr/v1/r/_manifests?orderby=timedesc&n=100": [
+                {"digest": f"sha256:scan-{i}", "tags": []} for i in range(5)
+            ]
+            + [{"digest": f"sha256:img-{i}", "tags": [f"v{i}"]} for i in range(3)],
+        }
+        client = FakeClient(pages=pages)
+        result = list_recent_manifests(client, "r", top=2)
+        assert [m.digest for m in result] == ["sha256:img-0", "sha256:img-1"]
 
 
 class TestResolveImageConfig:

@@ -53,7 +53,7 @@ def make_e2e_client() -> ScriptedClient:
             "teamx/api",
             "teamy/legacy",
         ],
-        "/acr/v1/teamx/api/_manifests?orderby=timedesc&n=2": [
+        "/acr/v1/teamx/api/_manifests?orderby=timedesc&n=100": [
             {
                 "digest": "sha256:good",
                 "tags": ["v2"],
@@ -65,7 +65,7 @@ def make_e2e_client() -> ScriptedClient:
                 "lastUpdateTime": "2026-11-20T08:00:00Z",
             },
         ],
-        "/acr/v1/teamy/legacy/_manifests?orderby=timedesc&n=2": [
+        "/acr/v1/teamy/legacy/_manifests?orderby=timedesc&n=100": [
             {
                 "digest": "sha256:legacy",
                 "tags": ["old"],
